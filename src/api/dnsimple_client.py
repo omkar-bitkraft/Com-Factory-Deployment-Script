@@ -186,7 +186,6 @@ class DNSimpleClient(BaseDomainProvider):
         """
         endpoint = f"/v2/{self.account_id}/registrar/domains/{domain}/prices"
         response = self._make_request("GET", endpoint)
-        print("Response........: ", response)
         return response.get("data", {})
 
     @retry(
@@ -220,6 +219,7 @@ class DNSimpleClient(BaseDomainProvider):
         # DNSimple response format
         data = response.get("data", {})
         available = data.get("available", False)
+        expiresAt = data.get("expires_at", None)
         
         # Get pricing if available
         price = 0.0
@@ -239,7 +239,7 @@ class DNSimpleClient(BaseDomainProvider):
             "domain": domain,
             "price": price,
             "currency": "USD",  # DNSimple uses USD
-            "period": 1,  # Default to 1 year as API doesn't return this
+            "expiresAt": expiresAt,
             "definitive": True
         }
         
@@ -266,31 +266,33 @@ class DNSimpleClient(BaseDomainProvider):
         Returns:
             List of suggested domains
         """
-        logger.info(f"Generating suggestions for: {query}")
+        # logger.info(f"Generating suggestions for: {query}")
         
-        # Create common variations
-        base = query.lower().replace(" ", "")
-        tlds = [".com", ".net", ".io", ".app", ".dev", ".co"]
-        prefixes = ["", "get", "my", "the"]
-        suffixes = ["", "app", "hq", "io", "online"]
+        # # Create common variations
+        # base = query.lower().replace(" ", "")
+        # tlds = [".com", ".net", ".io", ".app", ".dev", ".co"]
+        # prefixes = ["", "get", "my", "the"]
+        # suffixes = ["", "app", "hq", "io", "online"]
         
-        suggestions = []
+        # suggestions = []
         
-        # Generate combinations
-        for tld in tlds:
-            suggestions.append(f"{base}{tld}")
+        # # Generate combinations
+        # for tld in tlds:
+        #     suggestions.append(f"{base}{tld}")
             
-            for prefix in prefixes:
-                if prefix:
-                    suggestions.append(f"{prefix}{base}{tld}")
+        #     for prefix in prefixes:
+        #         if prefix:
+        #             suggestions.append(f"{prefix}{base}{tld}")
             
-            for suffix in suffixes:
-                if suffix:
-                    suggestions.append(f"{base}{suffix}{tld}")
+        #     for suffix in suffixes:
+        #         if suffix:
+        #             suggestions.append(f"{base}{suffix}{tld}")
         
-        # Return unique suggestions up to limit
-        unique_suggestions = list(dict.fromkeys(suggestions))
-        return unique_suggestions[:limit]
+        # # Return unique suggestions up to limit
+        # unique_suggestions = list(dict.fromkeys(suggestions))
+        # return unique_suggestions[:limit]
+        logger.info(f"DNSimple does not support domain suggestions via API")
+        raise NotImplementedError("DNSimple does not support domain suggestions via API")
     
     @retry(
         stop=stop_after_attempt(3),
@@ -431,6 +433,7 @@ class DNSimpleClient(BaseDomainProvider):
             params = {"page": page, "per_page": per_page}
             
             response = self._make_request("GET", endpoint, params=params)
+            print("Response List........", response)
             
             data = response.get("data", [])
             pagination = response.get("pagination", {})

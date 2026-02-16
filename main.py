@@ -65,7 +65,7 @@ def cmd_domain_search(args):
             print(f"{'='*60}")
             for result in results:
                 status = "\u2705 AVAILABLE" if result.get("available") else "\u274c TAKEN"
-                price = f"${result.get('price_dollars', 0):.2f}" if result.get("available") else "-"
+                price = f"${result.get('price', 0):.2f}" if result.get("available") else "-"
                 print(f"  {result['domain']:<40} {status:15} {price}")
             print(f"{'='*60}\n")
         else:
@@ -78,8 +78,9 @@ def cmd_domain_search(args):
             print(f"{'='*60}")
             print(f"  Available: {'YES \u2705' if result['available'] else 'NO \u274c'}")
             if result['available']:
-                print(f"  Price:     ${result['price_dollars']:.2f} {result['currency']}")
-                print(f"  Period:    {result['period']} year(s)")
+                print(f"  Price:        ${result['price']:.2f} {result['currency']}")
+                print(f"  Period:       {result['period']} year(s)")
+                print(f"  Expires At:   {result['expires_at']} ")
             print(f"{'='*60}\n")
     
     except Exception as e:

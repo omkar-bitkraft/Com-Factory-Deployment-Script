@@ -47,6 +47,7 @@ class BaseDomainProvider(ABC):
                 "available": bool,
                 "domain": str,
                 "price": int (micros) or float,
+                "expiresAt": str (ISO date) or None,
                 "currency": str,
                 "period": int
             }

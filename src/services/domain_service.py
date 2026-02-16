@@ -85,16 +85,15 @@ class DomainService:
                 "domain": domain,
                 "available": result.get("available", False),
                 "definitive": result.get("definitive", False),
-                "price_micros": result.get("price", 0),
-                "price_dollars": result.get("price", 0) / 1_000_000,
+                "price": result.get("price", 0),
                 "currency": result.get("currency", "USD"),
-                "period": result.get("period", 1),
+                "period": result.get("period", None),
+                "expires_at": result.get("expiresAt", None),
                 "raw_response": result
             }
-            
             # Log result
             if formatted_result["available"]:
-                logger.info(f"✅ {domain} is AVAILABLE - ${formatted_result['price_dollars']:.2f} {formatted_result['currency']}")
+                logger.info(f"✅ {domain} is AVAILABLE - ${formatted_result['price']:.2f} {formatted_result['currency']}")
             else:
                 logger.info(f"❌ {domain} is NOT available")
             
@@ -158,7 +157,7 @@ class DomainService:
             
         except Exception as e:
             logger.error(f"Error getting suggestions: {str(e)}")
-            raise DomainServiceError(f"Failed to get suggestions: {str(e)}") from e
+            raise DomainServiceError(f"{str(e)}") from e
     
     def purchase_domain_workflow(
         self,
@@ -200,8 +199,8 @@ class DomainService:
                 raise DomainServiceError(f"Domain {domain} is not available for purchase")
             
             # Log availability
-            price_dollars = availability.get("price", 0) / 1_000_000
-            logger.info(f"✅ Domain {domain} is available - ${price_dollars:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
+            price = availability.get("price", 0)
+            logger.info(f"✅ Domain {domain} is available - ${price:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
             
             # Step 3: Validate contact info
             logger.info("Step 2: Validating contact information...")
@@ -211,16 +210,16 @@ class DomainService:
             if validate_first:
                 logger.info("Step 3: Validating purchase...")
                 validation = self.client.validate_purchase(domain, contact_info)
-                logger.info("✅ Purchase validation successful")
+                logger.info("✅ Purchase validation successful", extra={"validation": validation})
             
             # Step 5: Confirm with user
             if confirm_purchase:
                 if self.client.is_production():
                     logger.warning("⚠️  WARNING: PRODUCTION ENVIRONMENT - REAL PURCHASE!")
-                    logger.warning(f"Domain: {domain} | Amount: ${price_dollars:.2f}")
+                    logger.warning(f"Domain: {domain} | Amount: ${price:.2f}")
                     response = input("\nProceed with REAL purchase? (yes/no): ")
                 else:
-                    logger.info(f"OTE Test Purchase: {domain} - ${price_dollars:.2f}")
+                    logger.info(f"OTE Test Purchase: {domain} - ${price:.2f}")
                     response = input("\nProceed with test purchase? (yes/no): ")
                 
                 if response.lower() not in ["yes", "y"]:

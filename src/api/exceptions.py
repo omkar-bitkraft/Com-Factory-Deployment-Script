@@ -61,3 +61,7 @@ class ValidationError(APIError):
 class ServerError(APIError):
     """Raised when GoDaddy server returns 5xx errors"""
     pass
+
+class NotImplementedError(APIError):
+    """Raised when a method is not implemented in the provider"""
+    pass

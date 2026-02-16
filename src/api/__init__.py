@@ -24,7 +24,8 @@ from src.api.exceptions import (
     InvalidDomainError,
     ValidationError,
     NetworkError,
-    ServerError
+    ServerError,
+    NotImplementedError
 )
 
 __all__ = [
@@ -48,5 +49,6 @@ __all__ = [
     "InvalidDomainError",
     "ValidationError",
     "NetworkError",
-    "ServerError"
+    "ServerError",
+    "NotImplementedError"
 ]
