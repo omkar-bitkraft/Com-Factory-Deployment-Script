@@ -312,29 +312,39 @@ class DNSimpleClient(BaseDomainProvider):
         """
         logger.info("Creating new contact in DNSimple")
         
-        # Map generic/GoDaddy keys to DNSimple keys
-        payload = {
-            "first_name": contact_info.get("nameFirst", contact_info.get("first_name")),
-            "last_name": contact_info.get("nameLast", contact_info.get("last_name")),
-            "email": contact_info.get("email"),
-            "phone": contact_info.get("phone"),
-            "address1": contact_info.get("addressMailing", {}).get("address1", contact_info.get("address1")),
-            "city": contact_info.get("addressMailing", {}).get("city", contact_info.get("city")),
-            "state_province": contact_info.get("addressMailing", {}).get("state", contact_info.get("state_province")),
-            "postal_code": contact_info.get("addressMailing", {}).get("postalCode", contact_info.get("postal_code")),
-            "country": contact_info.get("addressMailing", {}).get("country", contact_info.get("country"))
-        }
+        try:
+            # Map generic/GoDaddy keys to DNSimple keys
+            # payload = {
+            #     "first_name": contact_info.get("nameFirst", contact_info.get("first_name")),
+            #     "last_name": contact_info.get("nameLast", contact_info.get("last_name")),
+            #     "email": contact_info.get("email"),
+            #     "phone": contact_info.get("phone"),
+            #     "address1": contact_info.get("addressMailing", {}).get("address1", contact_info.get("address1")),
+            #     "city": contact_info.get("addressMailing", {}).get("city", contact_info.get("city")),
+            #     "state_province": contact_info.get("addressMailing", {}).get("state", contact_info.get("state_province")),
+            #     "postal_code": contact_info.get("addressMailing", {}).get("postalCode", contact_info.get("postal_code")),
+            #     "country": contact_info.get("addressMailing", {}).get("country", contact_info.get("country"))
+            # }
 
-        # Check for organization (optional)
-        if "organization" in contact_info:
-            payload["organization_name"] = contact_info["organization"]
-        
-        endpoint = f"/v2/{self.account_id}/contacts"
-        response = self._make_request("POST", endpoint, json_data=payload)
-        
-        contact_id = response.get("data", {}).get("id")
-        logger.info(f"Created contact with ID: {contact_id}")
-        return contact_id
+            payload = {
+                "name": contact_info.get("name"),
+                "email": contact_info.get("email"),
+                "description": contact_info.get("name"),
+            }
+
+            # Check for organization (optional)
+            if "organization" in contact_info:
+                payload["organization_name"] = contact_info["organization"]
+            
+            endpoint = f"/v2/{self.account_id}/contacts"
+            response = self._make_request("POST", endpoint, json_data=payload)
+            
+            contact_id = response.get("data", {}).get("id")
+            logger.info(f"Created contact with ID: {contact_id}")
+            return contact_id
+        except Exception as e:
+            logger.error(f"Failed to create contact: {str(e)}")
+            raise APIValidationError("Failed to create contact in DNSimple. Please ensure all required fields are provided and valid.")
 
     @retry(
         stop=stop_after_attempt(2),
@@ -368,7 +378,7 @@ class DNSimpleClient(BaseDomainProvider):
         if self.is_production():
             logger.warning("⚠️  REAL PURCHASE IN PRODUCTION ENVIRONMENT!")
         
-        logger.info(f"Purchasing domain: {domain}")
+        logger.info(f"Purchasing process for domain: {domain}")
         
         # Get or create registrant
         registrant_id = contact_info.get("registrant_id")
@@ -377,6 +387,7 @@ class DNSimpleClient(BaseDomainProvider):
             try:
                 # Attempt to create contact from provided info
                 registrant_id = self.create_contact(contact_info)
+                logger.info(f"Using registrant ID: {registrant_id} for domain purchase")
             except Exception as e:
                 logger.error(f"Failed to create contact: {str(e)}")
                 raise APIValidationError("DNSimple requires a valid 'registrant_id' or complete contact info")

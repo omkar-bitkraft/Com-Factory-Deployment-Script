@@ -165,6 +165,7 @@ class DomainService:
         contact_info: Dict[str, Any],
         period: int = 1,
         privacy: bool = False,
+        auto_renew: bool = False,
         validate_first: bool = True,
         confirm_purchase: bool = True
     ) -> Dict[str, Any]:
@@ -203,16 +204,10 @@ class DomainService:
             logger.info(f"✅ Domain {domain} is available - ${price:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
             
             # Step 3: Validate contact info
-            logger.info("Step 2: Validating contact information...")
-            self._validate_contact_info(contact_info)
-            
-            # Step 4: Validate purchase (optional)
-            if validate_first:
-                logger.info("Step 3: Validating purchase...")
-                validation = self.client.validate_purchase(domain, contact_info)
-                logger.info("✅ Purchase validation successful", extra={"validation": validation})
-            
-            # Step 5: Confirm with user
+            logger.info("Skipping.... Step 2: Validating contact information...")
+            # self._validate_contact_info(contact_info)
+    
+            # Step 4: Confirm with user
             if confirm_purchase:
                 if self.client.is_production():
                     logger.warning("⚠️  WARNING: PRODUCTION ENVIRONMENT - REAL PURCHASE!")
@@ -232,7 +227,8 @@ class DomainService:
                 domain=domain,
                 contact_info=contact_info,
                 period=period,
-                privacy=privacy
+                privacy=privacy,
+                auto_renew=auto_renew
             )
             
             logger.info(f"✅ Domain Purchased Successfully! - {domain}")

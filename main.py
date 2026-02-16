@@ -156,6 +156,39 @@ def cmd_domain_info(args):
         logger.error(f"\u274c Failed to get domain details: {str(e)}")
         sys.exit(1)
 
+import json
+
+def cmd_domain_purchase(args):
+    """Purchase a domain, with necessary arguments and contact info"""
+    logger.info(f"Purchasing domain: {args.domain}")
+
+    try:
+        contact_info = None
+        if args.contact_info:
+            try:
+                contact_info = json.loads(args.contact_info)
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid contact-info JSON: {str(e)}")
+                sys.exit(1)
+        
+        # Ensure contact info is provided
+        if not contact_info:
+             logger.error("Contact info is required for purchase. Please provide --contact-info as a JSON string.")
+             sys.exit(1)
+
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        #TODO: contact-info to be validate what to be sent, along with "registrant_id" how to generate via API also which is in the below method itself
+        purchase_result = domain_service.purchase_domain_workflow(
+            domain=args.domain,
+            contact_info=contact_info,
+            period=args.period if hasattr(args, 'period') else 1,
+            privacy=args.privacy if hasattr(args, 'privacy') else False,
+            auto_renew=args.auto_renew if hasattr(args, 'auto_renew') else False
+        )
+        logger.info(f"Purchase result: {purchase_result}")
+    except Exception as e:
+        logger.error(f"Failed to purchase domain: {str(e)}")
+        sys.exit(1)
 
 def main():
     """Main CLI entry point"""
@@ -184,6 +217,9 @@ Examples:
   
   # Get domain details
   python main.py domain info myexistingdomain.com
+
+  # Purchase a domain
+  python main.py domain purchase mynewdomain.com --contact-info '{"name": "John Doe", "email": "john@example.com"}' --period 2 --privacy --auto-renew
         """
     )
     
@@ -232,6 +268,14 @@ Examples:
     info_parser.add_argument("domain", help="Domain name")
     info_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
     info_parser.set_defaults(func=cmd_domain_info)
+
+    # domain purchase
+    purchase_parser = domain_subparsers.add_parser("purchase", help="Purchase a domain")
+    purchase_parser.add_argument("domain", help="Domain name to purchase")
+    purchase_parser.add_argument("--contact-info", type=str, help="Registrant contact info as JSON string")
+    purchase_parser.add_argument("--period", type=int, default=1, help="Registration period in years (default: 1)")
+    purchase_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    purchase_parser.set_defaults(func=cmd_domain_purchase)
     
     # Parse and execute
     args = parser.parse_args()

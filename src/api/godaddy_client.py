@@ -256,6 +256,10 @@ class GoDaddyClient(BaseDomainProvider):
         
         response = self._make_request("GET", endpoint, params=params)
         
+        # Normalize price to dollars (GoDaddy returns micros)
+        if "price" in response:
+            response["price"] = response["price"] / 1_000_000.0
+            
         logger.info(f"Domain {domain} - Available: {response.get('available', False)}")
         
         return response
