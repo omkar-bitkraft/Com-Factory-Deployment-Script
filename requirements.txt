@@ -1,0 +1,28 @@
+# Core Dependencies
+boto3>=1.34.0                  # AWS S3 integration
+requests>=2.31.0               # HTTP client for API calls
+
+# Configuration Management
+python-dotenv>=1.0.0           # Load environment variables from .env
+
+# Data Validation & Parsing
+pydantic>=2.5.0                # Data validation with type hints
+pydantic-settings>=2.1.0       # Settings management with pydantic
+
+# CLI Enhancement
+rich>=13.7.0                   # Beautiful terminal output
+questionary>=2.0.1             # Interactive CLI prompts
+click>=8.1.7                   # Alternative CLI framework
+
+# Retry Logic & HTTP Utilities
+tenacity>=8.2.3                # Retry with exponential backoff
+urllib3>=2.1.0                 # HTTP utilities
+
+# Logging
+colorlog>=6.8.0                # Colored logging output
+
+# Testing (Development)
+pytest>=7.4.0                  # Testing framework
+pytest-mock>=3.12.0            # Mocking support
+pytest-cov>=4.1.0              # Coverage reporting
+responses>=0.24.0              # Mock HTTP responses

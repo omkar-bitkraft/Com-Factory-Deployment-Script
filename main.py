@@ -1,0 +1,255 @@
+"""
+Main CLI Entry Point
+Unified command-line interface for:
+- Next.js build and deployment
+- GoDaddy domain management
+"""
+
+import sys
+import argparse
+from pathlib import Path
+
+from src.services import DeploymentService, DomainService
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def cmd_build_deploy(args):
+    """Build and deploy Next.js application"""
+    logger.info(f"Starting build & deploy: {args.app_dir}")
+    
+    try:
+        deploy_service = DeploymentService(Path(args.app_dir))
+        
+        if args.s3:
+            # S3 deployment
+            result = deploy_service.build_and_deploy_s3(
+                bucket_name=args.s3_bucket,
+                s3_prefix=args.s3_prefix or "",
+                build_command=args.build_cmd,
+                make_public=args.public
+            )
+            logger.info(f"\u2705 Deployed {result['file_count']} files to S3: {result['bucket']}")
+        else:
+            # Local deployment
+            destination = Path(args.output) if args.output else Path("./output_files/deployment")
+            result = deploy_service.build_and_deploy_local(
+                destination=destination,
+                build_command=args.build_cmd,
+                clean_destination=not args.no_clean,
+                add_timestamp=args.timestamp
+            )
+            logger.info(f"\u2705 Deployed to: {result}")
+    
+    except Exception as e:
+        logger.error(f"\u274c Deployment failed: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_domain_search(args):
+    """Search for domain availability"""
+    logger.info(f"Searching domain: {args.domain}")
+    
+    try:
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        
+        if args.multiple:
+            # Multiple domains
+            domains = args.domain.split(",")
+            results = domain_service.search_multiple_domains(domains)
+            
+            # Print summary
+            print(f"\n{'='*60}")
+            print(f" DOMAIN SEARCH RESULTS ({len(results)} domains)")
+            print(f"{'='*60}")
+            for result in results:
+                status = "\u2705 AVAILABLE" if result.get("available") else "\u274c TAKEN"
+                price = f"${result.get('price_dollars', 0):.2f}" if result.get("available") else "-"
+                print(f"  {result['domain']:<40} {status:15} {price}")
+            print(f"{'='*60}\n")
+        else:
+            # Single domain
+            result = domain_service.search_domain(args.domain)
+            
+            # Print result
+            print(f"\n{'='*60}")
+            print(f" DOMAIN: {result['domain']}")
+            print(f"{'='*60}")
+            print(f"  Available: {'YES \u2705' if result['available'] else 'NO \u274c'}")
+            if result['available']:
+                print(f"  Price:     ${result['price_dollars']:.2f} {result['currency']}")
+                print(f"  Period:    {result['period']} year(s)")
+            print(f"{'='*60}\n")
+    
+    except Exception as e:
+        logger.error(f"\u274c Domain search failed: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_domain_suggest(args):
+    """Get domain suggestions"""
+    logger.info(f"Getting suggestions for: {args.query}")
+    
+    try:
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        suggestions = domain_service.get_suggestions(args.query, limit=args.limit)
+        
+        # Print suggestions
+        print(f"\n{'='*60}")
+        print(f" DOMAIN SUGGESTIONS FOR: '{args.query}'")
+        print(f"{'='*60}")
+        for i, domain in enumerate(suggestions, 1):
+            print(f"  {i:2}. {domain}")
+        print(f"{'='*60}\n")
+    
+    except Exception as e:
+        logger.error(f"\u274c Failed to get suggestions: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_domain_list(args):
+    """List owned domains"""
+    logger.info("Fetching owned domains...")
+    
+    try:
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        domains = domain_service.get_owned_domains()
+        
+        # Print domains
+        print(f"\n{'='*60}")
+        print(f" OWNED DOMAINS ({len(domains)})")
+        print(f"{'='*60}")
+        for domain_info in domains:
+            domain_name = domain_info.get("domain", "N/A")
+            status = domain_info.get("status", "N/A")
+            created = domain_info.get("createdAt", "N/A")[:10] if domain_info.get("createdAt") else "N/A"
+            print(f"  {domain_name:<40} Status: {status:<15} Created: {created}")
+        print(f"{'='*60}\n")
+    
+    except Exception as e:
+        logger.error(f"\u274c Failed to fetch domains: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_domain_info(args):
+    """Get domain details"""
+    logger.info(f"Getting details for: {args.domain}")
+    
+    try:
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        details = domain_service.get_domain_info(args.domain)
+        
+        # Print details
+        print(f"\n{'='*60}")
+        print(f" DOMAIN DETAILS: {details.get('domain', 'N/A')}")
+        print(f"{'='*60}")
+        print(f"  Status:      {details.get('status', 'N/A')}")
+        print(f"  Created:     {details.get('createdAt', 'N/A')}")
+        print(f"  Expires:     {details.get('expires', 'N/A')}")
+        print(f"  Auto-Renew:  {details.get('renewAuto', False)}")
+        print(f"  Privacy:     {details.get('privacy', False)}")
+        print(f"{'='*60}\n")
+    
+    except Exception as e:
+        logger.error(f"\u274c Failed to get domain details: {str(e)}")
+        sys.exit(1)
+
+
+def main():
+    """Main CLI entry point"""
+    parser = argparse.ArgumentParser(
+        description="Next.js Deployment & Domain Management CLI",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Build and deploy locally
+  python main.py deploy --app-dir ./my-nextjs-app --output ./deployment
+  
+  # Build and deploy to S3
+  python main.py deploy --app-dir ./my-nextjs-app --s3 --s3-bucket my-bucket --public
+  
+  # Search domain
+  python main.py domain search myawesomeapp.com
+  
+  # Search multiple domains
+  python main.py domain search "app.com,app.net,app.io" --multiple
+  
+  # Get domain suggestions
+  python main.py domain suggest "coffee shop" --limit 10
+  
+  # List owned domains
+  python main.py domain list
+  
+  # Get domain details
+  python main.py domain info myexistingdomain.com
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # ==================== DEPLOY COMMAND ====================
+    deploy_parser = subparsers.add_parser("deploy", help="Build and deploy Next.js app")
+    deploy_parser.add_argument("--app-dir", required=True, help="Path to Next.js application")
+    deploy_parser.add_argument("--output", help="Local deployment directory (default: ./output_files/deployment)")
+    deploy_parser.add_argument("--build-cmd", default="pnpm build", help="Build command (default: pnpm build)")
+    deploy_parser.add_argument("--no-clean", action="store_true", help="Don't clean destination before deployment")
+    deploy_parser.add_argument("--timestamp", action="store_true", help="Add timestamp to deployment folder")
+    
+    # S3 options
+    deploy_parser.add_argument("--s3", action="store_true", help="Deploy to AWS S3")
+    deploy_parser.add_argument("--s3-bucket", help="S3 bucket name")
+    deploy_parser.add_argument("--s3-prefix", help="S3 prefix (folder path)")
+    deploy_parser.add_argument("--public", action="store_true", help="Make S3 files public")
+    deploy_parser.set_defaults(func=cmd_build_deploy)
+    
+    # ==================== DOMAIN COMMAND ====================
+    domain_parser = subparsers.add_parser("domain", help="Domain management")
+    domain_subparsers = domain_parser.add_subparsers(dest="domain_command", help="Domain operations")
+    
+    # domain search
+    search_parser = domain_subparsers.add_parser("search", help="Search domain availability")
+    search_parser.add_argument("domain", help="Domain name (or comma-separated for multiple)")
+    search_parser.add_argument("--multiple", action="store_true", help="Search multiple domains")
+    search_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    search_parser.set_defaults(func=cmd_domain_search)
+    
+    # domain suggest
+    suggest_parser = domain_subparsers.add_parser("suggest", help="Get domain suggestions")
+    suggest_parser.add_argument("query", help="Search query")
+    suggest_parser.add_argument("--limit", type=int, default=10, help="Max suggestions (default: 10)")
+    suggest_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    suggest_parser.set_defaults(func=cmd_domain_suggest)
+    
+    # domain list
+    list_parser = domain_subparsers.add_parser("list", help="List owned domains")
+    list_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    list_parser.set_defaults(func=cmd_domain_list)
+    
+    # domain info
+    info_parser = domain_subparsers.add_parser("info", help="Get domain details")
+    info_parser.add_argument("domain", help="Domain name")
+    info_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    info_parser.set_defaults(func=cmd_domain_info)
+    
+    # Parse and execute
+    args = parser.parse_args()
+    
+    if not args.command:
+        # run the search domain for now since want to debug and not able to run by command
+        # args = parser.parse_args(["domain", "search", "myawesomeuniquedomain12345.com"])
+        # cmd_domain_search(args)
+        # sys.exit(1)
+        parser.print_help()
+        sys.exit(0)
+    
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
+
+    #Todo: Price while getting domain not workingf
