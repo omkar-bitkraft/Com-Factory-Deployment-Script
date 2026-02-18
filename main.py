@@ -171,10 +171,10 @@ def cmd_domain_purchase(args):
                 logger.error(f"Invalid contact-info JSON: {str(e)}")
                 sys.exit(1)
         
-        # Ensure contact info is provided
-        if not contact_info:
-             logger.error("Contact info is required for purchase. Please provide --contact-info as a JSON string.")
-             sys.exit(1)
+        # Ensure contact info is provided #Todo: Add handling while purchasing domain fpr contactinfo if not passed
+        # if not contact_info:
+        #      logger.error("Contact info is required for purchase. Please provide --contact-info as a JSON string.")
+        #      sys.exit(1)
 
         domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
         #TODO: contact-info to be validate what to be sent, along with "registrant_id" how to generate via API also which is in the below method itself
@@ -188,6 +188,54 @@ def cmd_domain_purchase(args):
         logger.info(f"Purchase result: {purchase_result}")
     except Exception as e:
         logger.error(f"Failed to purchase domain: {str(e)}")
+        sys.exit(1)
+
+def cmd_contact_info(args):
+    """Get contact/registrant information for the account"""
+    logger.info("Fetching contact information...")
+    
+    try:
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        contact_info = domain_service.get_contact_info()
+        
+        # Print contact info
+        print(f"\n{'='*60}")
+        print(f" CONTACT INFORMATION")
+        print(f"{'='*60}")
+        if isinstance(contact_info, list):
+            for contact in contact_info:
+                for key, value in contact.items():
+                    print(f"  {key.capitalize()}: {value}")
+        else:
+            for key, value in contact_info.items():
+                print(f"  {key.capitalize()}: {value}")
+        print(f"{'='*60}\n")
+    
+    except Exception as e:
+        logger.error(f"\u274c Failed to fetch contact information: {str(e)}")
+        sys.exit(1)
+
+def cmd_contact_create(args):
+    """Create contact/registrant information"""
+    logger.info("Creating contact information...")
+    
+    try:
+        contact_info = None
+        if args.contact_info:
+            try:
+                contact_info = json.loads(args.contact_info)
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid contact-info JSON: {str(e)}")
+                sys.exit(1)
+        # Ensure contact info is provided
+        if not contact_info:
+             logger.error("Contact info is required for contact creation. Please provide --contact-info as a JSON string.")
+             sys.exit(1)
+        domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
+        contact_info = domain_service.create_contact_info(contact_info)
+        logger.info(f"Contact information created: {contact_info}")
+    except Exception as e:
+        logger.error(f"\u274c Failed to create contact information: {str(e)}")
         sys.exit(1)
 
 def main():
@@ -217,6 +265,12 @@ Examples:
   
   # Get domain details
   python main.py domain info myexistingdomain.com
+
+  # Get contact details
+  python main.py contact-info
+
+  # Create contact
+  python main.py contact-create '{"name": "John Doe", "email": "john@example.com"}'
 
   # Purchase a domain
   python main.py domain purchase mynewdomain.com --contact-info '{"name": "John Doe", "email": "john@example.com"}' --period 2 --privacy --auto-renew
@@ -276,6 +330,18 @@ Examples:
     purchase_parser.add_argument("--period", type=int, default=1, help="Registration period in years (default: 1)")
     purchase_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
     purchase_parser.set_defaults(func=cmd_domain_purchase)
+
+    # contact info
+    contact_parser = subparsers.add_parser("contact-info", help="Get contact/registrant information")
+    contact_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    contact_parser.set_defaults(func=cmd_contact_info)
+
+    # contact create
+    contact_parser = subparsers.add_parser("contact-create", help="Create contact/registrant information")
+    #Also suggest the necessary keys required for contact creation
+    contact_parser.add_argument("--contact-info", type=str, help="Registrant contact info as JSON string (required keys: nameFirst, nameLast, email, phone, addressMailing, city, state, postalCode, country)")
+    contact_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
+    contact_parser.set_defaults(func=cmd_contact_create)
     
     # Parse and execute
     args = parser.parse_args()
@@ -296,5 +362,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
-    #Todo: Price while getting domain not workingf

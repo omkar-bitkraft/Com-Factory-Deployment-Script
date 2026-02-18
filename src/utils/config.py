@@ -55,6 +55,11 @@ class Settings(BaseSettings):
         default=True,
         description="Use DNSimple sandbox environment"
     )
+
+    dnsimple_registrant_id: str = Field(
+        default="",
+        description="DNSimple registrant ID"
+    )
     
     # Logging Configuration
     log_level: str = Field(

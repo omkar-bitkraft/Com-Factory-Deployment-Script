@@ -194,14 +194,16 @@ class DomainService:
             
             # Step 2: Check availability
             logger.info("Step 1: Checking domain availability...")
-            availability = self.client.check_availability(domain)
+            #Todo: Currently the check_availability reached limit. check hot ot handle cases?
+            # availability = self.client.check_availability(domain)
             
-            if not availability.get("available"):
-                raise DomainServiceError(f"Domain {domain} is not available for purchase")
+            # if not availability.get("available"):
+            #     raise DomainServiceError(f"Domain {domain} is not available for purchase")
             
-            # Log availability
-            price = availability.get("price", 0)
-            logger.info(f"✅ Domain {domain} is available - ${price:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
+            # # Log availability
+            # price = availability.get("price", 0)
+            price = 0
+            # logger.info(f"✅ Domain {domain} is available - ${price:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
             
             # Step 3: Validate contact info
             logger.info("Skipping.... Step 2: Validating contact information...")
@@ -289,6 +291,52 @@ class DomainService:
         except DomainServiceError as e:
             logger.error(f"Error getting domain details: {str(e)}")
             raise DomainServiceError(f"Failed to get domain details: {str(e)}") from e
+        
+    def get_contact_info(
+        self
+    ) -> Dict[str, Any]:
+        """
+        Get contact/registrant information for the account.
+        
+        Args:
+            domain: Domain name
+            
+        Returns:
+            Domain details dictionary
+        """
+        logger.info(f"Getting contact information")
+        
+        try:
+            details = self.client.get_contact()
+            logger.info(f"Retrieved contact information: {details}")
+            
+            return details
+            
+        except DomainServiceError as e:
+            logger.error(f"Error getting contact details: {str(e)}")
+            raise DomainServiceError(f"Failed to get contact details: {str(e)}") from e
+
+    def create_contact_info(self, contact: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create contact/registrant information.
+        
+        Args:
+            contact: Contact information dictionary
+            
+        Returns:
+            Contact information dictionary
+        """
+        logger.info(f"Creating new contact")
+        
+        try:
+            contact_info = self.client.create_contact(contact)
+            logger.info(f"Contact information created: {contact_info}")
+            
+            return contact_info
+            
+        except DomainServiceError as e:
+            logger.error(f"Error creating new contact: {str(e)}")
+            raise DomainServiceError(f"Failed to create new contact: {str(e)}") from e
     
     def _validate_contact_info(self, contact: Dict[str, Any]):
         """

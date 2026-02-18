@@ -32,6 +32,20 @@ class BaseDomainProvider(ABC):
             True if production, False if test/sandbox
         """
         pass
+
+    @abstractmethod
+    def get_contact(self) -> Dict[str, Any]:
+        """
+        Get contact/registrant information for the account.
+        """
+        pass
+
+    @abstractmethod
+    def create_contact(self, contact: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create contact/registrant information.
+        """
+        pass
     
     @abstractmethod
     def check_availability(self, domain: str) -> Dict[str, Any]:

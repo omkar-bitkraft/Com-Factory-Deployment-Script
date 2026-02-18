@@ -313,24 +313,23 @@ class DNSimpleClient(BaseDomainProvider):
         logger.info("Creating new contact in DNSimple")
         
         try:
-            # Map generic/GoDaddy keys to DNSimple keys
-            # payload = {
-            #     "first_name": contact_info.get("nameFirst", contact_info.get("first_name")),
-            #     "last_name": contact_info.get("nameLast", contact_info.get("last_name")),
-            #     "email": contact_info.get("email"),
-            #     "phone": contact_info.get("phone"),
-            #     "address1": contact_info.get("addressMailing", {}).get("address1", contact_info.get("address1")),
-            #     "city": contact_info.get("addressMailing", {}).get("city", contact_info.get("city")),
-            #     "state_province": contact_info.get("addressMailing", {}).get("state", contact_info.get("state_province")),
-            #     "postal_code": contact_info.get("addressMailing", {}).get("postalCode", contact_info.get("postal_code")),
-            #     "country": contact_info.get("addressMailing", {}).get("country", contact_info.get("country"))
-            # }
-
+            # Map to DNSimple keys
+            # Handle both nested addressMailing and top-level keys, and GoDaddy vs DNSimple naming conventions
+            address = contact_info.get("addressMailing", {})
+            
             payload = {
-                "name": contact_info.get("name"),
+                "first_name": contact_info.get("nameFirst", contact_info.get("first_name")),
+                "last_name": contact_info.get("nameLast", contact_info.get("last_name")),
                 "email": contact_info.get("email"),
-                "description": contact_info.get("name"),
+                "phone": contact_info.get("phone"),
+                "address1": address.get("address1", contact_info.get("address1")),
+                "city": address.get("city", contact_info.get("city")),
+                "state_province": address.get("state", contact_info.get("state_province", contact_info.get("state"))),
+                "postal_code": address.get("postalCode", contact_info.get("postal_code", contact_info.get("postalCode"))),
+                "country": address.get("country", contact_info.get("country"))
             }
+            
+            logger.info(f"DNSimple Contact Payload: {payload}")
 
             # Check for organization (optional)
             if "organization" in contact_info:
@@ -345,6 +344,19 @@ class DNSimpleClient(BaseDomainProvider):
         except Exception as e:
             logger.error(f"Failed to create contact: {str(e)}")
             raise APIValidationError("Failed to create contact in DNSimple. Please ensure all required fields are provided and valid.")
+        
+    def get_contact(self) -> Dict[str, Any]:
+        """
+        Get contact details.
+        """ 
+        try:
+            logger.info("Fetching contact details from DNSimple")
+            endpoint = f"/v2/{self.account_id}/contacts"
+            contact_info = self._make_request("GET", endpoint)
+            return contact_info.get("data", {})
+        except Exception as e:
+            logger.error(f"Failed to fetch contact details: {str(e)}")
+            raise APIValidationError("Failed to fetch contact details from DNSimple: "+ str(e))
 
     @retry(
         stop=stop_after_attempt(2),
@@ -381,12 +393,14 @@ class DNSimpleClient(BaseDomainProvider):
         logger.info(f"Purchasing process for domain: {domain}")
         
         # Get or create registrant
-        registrant_id = contact_info.get("registrant_id")
+        registrant_id = contact_info.get("registrant_id") if contact_info else None
         
         if not registrant_id:
             try:
-                # Attempt to create contact from provided info
-                registrant_id = self.create_contact(contact_info)
+                registrant_id = self.config.dnsimple_registrant_id
+                if not registrant_id:
+                    # Attempt to create contact from provided info
+                    registrant_id = self.create_contact(contact_info)
                 logger.info(f"Using registrant ID: {registrant_id} for domain purchase")
             except Exception as e:
                 logger.error(f"Failed to create contact: {str(e)}")
@@ -399,9 +413,9 @@ class DNSimpleClient(BaseDomainProvider):
             "whois_privacy": privacy
         }
         
-        # Add premium price if provided (required for premium domains)
-        if "premium_price" in contact_info:
-            payload["premium_price"] = str(contact_info["premium_price"])
+        # Add premium price if provided (required for premium domains) #Todo: Handle the case if necessary because of contact_info not been providing thorugh cli
+        # if "premium_price" in contact_info:
+        #     payload["premium_price"] = str(contact_info["premium_price"])
         
         endpoint = f"/v2/{self.account_id}/registrar/domains/{domain}/registrations"
         response = self._make_request("POST", endpoint, json_data=payload)
