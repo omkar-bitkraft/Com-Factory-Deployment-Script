@@ -9,7 +9,7 @@ import sys
 import argparse
 from pathlib import Path
 
-from src.services import DeploymentService, DomainService
+from src.services import DeploymentService, DomainService, AWSDomainService
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -233,6 +233,67 @@ def cmd_contact_create(args):
         logger.error(f"\u274c Failed to create contact information: {str(e)}")
         sys.exit(1)
 
+def cmd_aws_domain_search(args):
+    """Search for domain availability on AWS"""
+    logger.info(f"Searching AWS domain: {args.domain}")
+    
+    try:
+        aws_service = AWSDomainService()
+        result = aws_service.check_availability(args.domain)
+        
+        # Print result
+        print(f"\n{'='*60}")
+        print(f" AWS DOMAIN: {result['domain']}")
+        print(f"{'='*60}")
+        print(f"  Available: {'YES \u2705' if result['available'] else 'NO \u274c'}")
+        print(f"  Status:    {result['status']}")
+        
+        if result['available']:
+            suggestions = aws_service.get_suggestions(args.domain)
+            if suggestions:
+                print(f"\n  Suggestions:")
+                for s in suggestions[:5]:
+                    print(f"    - {s}")
+        print(f"{'='*60}\n")
+    
+    except Exception as e:
+        logger.error(f"\u274c AWS Domain search failed: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_aws_domain_register(args):
+    """Register a domain on AWS"""
+    logger.info(f"Registering AWS domain: {args.domain}")
+    
+    try:
+        contact_info = None
+        if args.contact:
+            with open(args.contact, 'r') as f:
+                contact_info = json.load(f)
+        else:
+            logger.error("Contact info file (--contact) is required for AWS registration.")
+            sys.exit(1)
+            
+        aws_service = AWSDomainService()
+        result = aws_service.register_domain(
+            domain=args.domain,
+            contact_info=contact_info,
+            duration=args.duration
+        )
+        
+        print(f"\n{'='*60}")
+        print(f" AWS REGISTRATION SUBMITTED")
+        print(f"{'='*60}")
+        print(f"  Domain:       {result['domain']}")
+        print(f"  Operation ID: {result['operation_id']}")
+        print(f"  Status:       {result['status']}")
+        print(f"{'='*60}\n")
+        
+    except Exception as e:
+        logger.error(f"\u274c AWS Registration failed: {str(e)}")
+        sys.exit(1)
+
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -337,6 +398,23 @@ Examples:
     contact_parser.add_argument("--contact-info", type=str, help="Registrant contact info as JSON string (required keys: nameFirst, nameLast, email, phone, addressMailing, city, state, postalCode, country)")
     contact_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
     contact_parser.set_defaults(func=cmd_contact_create)
+
+    # ==================== AWS DOMAIN COMMAND ====================
+    aws_domain_parser = subparsers.add_parser("aws-domain", help="AWS Route53 domain management (Standalone)")
+    aws_domain_subparsers = aws_domain_parser.add_subparsers(dest="aws_domain_command", help="AWS Domain operations")
+
+    # aws-domain search
+    aws_search_parser = aws_domain_subparsers.add_parser("search", help="Search domain availability on AWS")
+    aws_search_parser.add_argument("domain", help="Domain name")
+    aws_search_parser.set_defaults(func=cmd_aws_domain_search)
+
+    # aws-domain register
+    aws_register_parser = aws_domain_subparsers.add_parser("register", help="Register a domain on AWS")
+    aws_register_parser.add_argument("domain", help="Domain name")
+    aws_register_parser.add_argument("--contact", required=True, help="Path to contact JSON file")
+    aws_register_parser.add_argument("--duration", type=int, default=1, help="Registration period (years)")
+    aws_register_parser.set_defaults(func=cmd_aws_domain_register)
+
     
     # Parse and execute
     args = parser.parse_args()

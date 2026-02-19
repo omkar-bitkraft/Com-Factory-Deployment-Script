@@ -19,7 +19,7 @@ except ImportError:
     S3_AVAILABLE = False
 
 from src.utils.logger import get_logger
-from src.utils.config import get_settings
+from src.utils.config import get_settings, Settings
 
 logger = get_logger(__name__)
 
@@ -40,17 +40,19 @@ class DeploymentService:
     Supports local deployment and AWS S3 upload.
     """
     
-    def __init__(self, app_directory: Path):
+    def __init__(self, app_directory: Path, config: Optional[Settings] = None):
         """
         Initialize deployment service.
         
         Args:
             app_directory: Path to Next.js application directory
+            config: Optional Settings object. If None, loads from get_settings()
             
         Raises:
             FileNotFoundError: If app_directory doesn't exist
         """
         self.app_directory = Path(app_directory).resolve()
+        self.config = config or get_settings()
         
         if not self.app_directory.exists():
             raise FileNotFoundError(f"Application directory not found: {self.app_directory}")
@@ -203,11 +205,9 @@ class DeploymentService:
         build_dir = self.get_build_directory()
         
         # Get AWS credentials from config if not provided
-        if not all([aws_access_key, aws_secret_key]):
-            config = get_settings()
-            aws_access_key = aws_access_key or config.aws_access_key_id
-            aws_secret_key = aws_secret_key or config.aws_secret_access_key
-            aws_region = aws_region or config.aws_region
+        aws_access_key = aws_access_key or self.config.aws_access_key_id
+        aws_secret_key = aws_secret_key or self.config.aws_secret_access_key
+        aws_region = aws_region or self.config.aws_region
         
         logger.info(f"Deploying to S3 bucket: {bucket_name}")
         logger.info(f"S3 prefix: {s3_prefix or '(root)'}")
