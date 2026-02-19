@@ -30,7 +30,7 @@ class DomainService:
     Supports multiple domain providers (GoDaddy, DNSimple, etc.)
     """
     
-    def __init__(self, provider: Optional[BaseDomainProvider] = None, provider_name: Optional[str] = None):
+    def __init__(self, provider: Optional[BaseDomainProvider] = None, provider_name: Optional[str] = None, config: Optional[Any] = None):
         """
         Initialize domain service.
         
@@ -53,7 +53,7 @@ class DomainService:
         if provider:
             self.client = provider
         else:
-            self.client = get_domain_provider(provider_name)
+            self.client = get_domain_provider(provider_name, config)
         
         logger.info(f"Domain service initialized")
         logger.info(f"Provider: {self.client.get_provider_name()}")
@@ -162,11 +162,10 @@ class DomainService:
     def purchase_domain_workflow(
         self,
         domain: str,
-        contact_info: Dict[str, Any],
+        contact_info: Dict[str, Any] = None,
         period: int = 1,
         privacy: bool = False,
         auto_renew: bool = False,
-        validate_first: bool = True,
         confirm_purchase: bool = True
     ) -> Dict[str, Any]:
         """
@@ -177,7 +176,7 @@ class DomainService:
             contact_info: Contact information dictionary
             period: Registration period in years
             privacy: Enable domain privacy
-            validate_first: Validate purchase before executing
+            auto_renew: Enable auto-renewal
             confirm_purchase: Require user confirmation
             
         Returns:
@@ -194,20 +193,21 @@ class DomainService:
             
             # Step 2: Check availability
             logger.info("Step 1: Checking domain availability...")
-            #Todo: Currently the check_availability reached limit. check hot ot handle cases?
-            # availability = self.client.check_availability(domain)
+            # Todo: Currently the check_availability reached limit.
+            availability = self.client.check_availability(domain)
             
-            # if not availability.get("available"):
-            #     raise DomainServiceError(f"Domain {domain} is not available for purchase")
+            if not availability.get("available"):
+                raise DomainServiceError(f"Domain {domain} is not available for purchase")
             
-            # # Log availability
-            # price = availability.get("price", 0)
-            price = 0
-            # logger.info(f"✅ Domain {domain} is available - ${price:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
+            # Log availability
+            price = availability.get("price", 0)
+
+            logger.info(f"✅ Domain {domain} is available - ${price:.2f} {availability.get('currency', 'USD')} for {period} year(s)")
             
             # Step 3: Validate contact info
-            logger.info("Skipping.... Step 2: Validating contact information...")
-            # self._validate_contact_info(contact_info)
+            if contact_info:
+                logger.info("Validating contact information...")
+                self._validate_contact_info(contact_info)
     
             # Step 4: Confirm with user
             if confirm_purchase:
@@ -216,7 +216,7 @@ class DomainService:
                     logger.warning(f"Domain: {domain} | Amount: ${price:.2f}")
                     response = input("\nProceed with REAL purchase? (yes/no): ")
                 else:
-                    logger.info(f"OTE Test Purchase: {domain} - ${price:.2f}")
+                    logger.info(f"Sandbox Purchase: {domain} - ${price:.2f}")
                     response = input("\nProceed with test purchase? (yes/no): ")
                 
                 if response.lower() not in ["yes", "y"]:
@@ -224,7 +224,7 @@ class DomainService:
                     return {"status": "cancelled", "domain": domain}
             
             # Step 6: Purchase domain
-            logger.info("Step 4: Purchasing domain...")
+            logger.info("Purchasing domain...")
             result = self.client.purchase_domain(
                 domain=domain,
                 contact_info=contact_info,

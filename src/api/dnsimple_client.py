@@ -413,9 +413,9 @@ class DNSimpleClient(BaseDomainProvider):
             "whois_privacy": privacy
         }
         
-        # Add premium price if provided (required for premium domains) #Todo: Handle the case if necessary because of contact_info not been providing thorugh cli
-        # if "premium_price" in contact_info:
-        #     payload["premium_price"] = str(contact_info["premium_price"])
+        # Add premium price if provided (required for premium domains)
+        if contact_info and "premium_price" in contact_info:
+            payload["premium_price"] = str(contact_info["premium_price"])
         
         endpoint = f"/v2/{self.account_id}/registrar/domains/{domain}/registrations"
         response = self._make_request("POST", endpoint, json_data=payload)

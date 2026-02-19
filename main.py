@@ -170,11 +170,6 @@ def cmd_domain_purchase(args):
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid contact-info JSON: {str(e)}")
                 sys.exit(1)
-        
-        # Ensure contact info is provided #Todo: Add handling while purchasing domain fpr contactinfo if not passed
-        # if not contact_info:
-        #      logger.error("Contact info is required for purchase. Please provide --contact-info as a JSON string.")
-        #      sys.exit(1)
 
         domain_service = DomainService(provider_name=args.provider if hasattr(args, 'provider') else None)
         #TODO: contact-info to be validate what to be sent, along with "registrant_id" how to generate via API also which is in the below method itself

@@ -312,6 +312,9 @@ class DeploymentService:
         self,
         bucket_name: str,
         s3_prefix: str = "",
+        aws_access_key: Optional[str] = None,
+        aws_secret_key: Optional[str] = None,
+        aws_region: Optional[str] = None,
         build_command: str = "pnpm build",
         make_public: bool = False
     ) -> Dict[str, Any]:
@@ -338,7 +341,10 @@ class DeploymentService:
         result = self.deploy_s3(
             bucket_name=bucket_name,
             s3_prefix=s3_prefix,
-            make_public=make_public
+            make_public=make_public,
+            aws_access_key=aws_access_key,
+            aws_secret_key=aws_secret_key,
+            aws_region=aws_region
         )
         
         logger.info("=" * 60)
