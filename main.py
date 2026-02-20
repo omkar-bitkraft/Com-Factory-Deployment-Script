@@ -11,6 +11,7 @@ from pathlib import Path
 
 from src.services import DeploymentService, DomainService, AWSDomainService
 from src.utils.logger import get_logger
+from src.utils.config import Settings
 
 logger = get_logger(__name__)
 
@@ -238,7 +239,8 @@ def cmd_aws_domain_search(args):
     logger.info(f"Searching AWS domain: {args.domain}")
     
     try:
-        aws_service = AWSDomainService()
+        custom_config = Settings()
+        aws_service = AWSDomainService(config=custom_config)
         result = aws_service.check_availability(args.domain)
         
         # Print result
@@ -435,3 +437,5 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+    #Todo: 1.IF pnpm install required?
