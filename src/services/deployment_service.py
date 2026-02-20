@@ -62,6 +62,32 @@ class DeploymentService:
         
         logger.info(f"Deployment service initialized for: {self.app_directory}")
     
+    def install_dependencies(self, install_command: str = "pnpm install") -> None:
+        """
+        Run the install command for the application.
+        
+        Args:
+            install_command: Install command to run (default: "pnpm install")
+            
+        Raises:
+            subprocess.CalledProcessError: If install fails
+        """
+        logger.info(f"Running install command: {install_command}")
+        
+        try:
+            subprocess.run(
+                install_command,
+                cwd=self.app_directory,
+                check=True,
+                shell=True,
+                capture_output=False # Stream output to console
+            )
+            logger.info("✅ Dependencies installed successfully")
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"❌ Install failed with exit code {e.returncode}")
+            raise
+            
     def run_build(self, build_command: str = "pnpm build") -> None:
         """
         Run the build command for the Next.js application.

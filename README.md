@@ -22,7 +22,7 @@ deployer.build_and_deploy_s3(
 ```
 
 ### 2. AWS Domain Service
-Standalone service for Route53 domain registration and automated DNS setup.
+Service for Route53 domain registration and automated DNS setup.
 
 ```python
 from src.services import AWSDomainService
@@ -31,6 +31,25 @@ aws_dns = AWSDomainService()
 
 # 1. Search for a domain
 result = aws_dns.check_availability("my-app.com")
+
+#2. Purchase a domain
+result = aws_dns.register_domain("my-app.com", contact_info)
+
+#3. Point Route53 to CloudFront
+result = aws_dns.setup_cloudfront_dns("my-app.com", "d123.cloudfront.net")
+```
+
+### 3. AWS CloudFront Service
+Create CloudFront Distribution and point Route53 to CloudFront
+
+```python
+from src.services import AWSCloudFrontService
+
+aws_cdn = AWSCloudFrontService()
+
+# 1. Create CloudFront Distribution
+result = aws_cdn.create_s3_distribution("my-bucket-name", "my-app.com")
+
 ```
 
 ### 🔐 Custom Configuration (Programmatic)
@@ -51,6 +70,7 @@ my_config = Settings(
 # Both services will now share the same credentials
 deployer = DeploymentService(Path("./my-app"), config=my_config)
 aws_dns = AWSDomainService(config=my_config)
+aws_cdn = AWSCloudFrontService(config=my_config)
 ```
 
 ---
@@ -59,13 +79,26 @@ aws_dns = AWSDomainService(config=my_config)
 
 ### Deploy App
 ```bash
+# Standard deploy
 python main.py deploy --app-dir ./my-app --s3 --s3-bucket my-bucket --public
+
+# With dependency installation (runs 'pnpm install' first)
+python main.py deploy --app-dir ./my-app --s3 --s3-bucket my-bucket --public --install
 ```
 
 ### Manage AWS Domains
 ```bash
 # Search
 python main.py aws-domain search my-app.com
+```
+
+### Manage AWS CloudFront (CDN)
+```bash
+# 1. Create CloudFront Distribution
+python main.py aws-cdn create --bucket my-bucket --domain my-app.com
+
+# 2. Setup DNS (Point Domain to CloudFront)
+python main.py aws-domain setup-cdn-dns --domain my-app.com --cdn-domain d123.cloudfront.net
 ```
 
 ---

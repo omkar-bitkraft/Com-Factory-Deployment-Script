@@ -9,7 +9,7 @@ import sys
 import argparse
 from pathlib import Path
 
-from src.services import DeploymentService, DomainService, AWSDomainService
+from src.services import DeploymentService, DomainService, AWSDomainService, AWSCDNService
 from src.utils.logger import get_logger
 from src.utils.config import Settings
 
@@ -22,6 +22,9 @@ def cmd_build_deploy(args):
     
     try:
         deploy_service = DeploymentService(Path(args.app_dir))
+        
+        if hasattr(args, 'install') and args.install:
+            deploy_service.install_dependencies()
         
         if args.s3:
             # S3 deployment
@@ -296,6 +299,59 @@ def cmd_aws_domain_register(args):
         sys.exit(1)
 
 
+def cmd_aws_cdn_create(args):
+    """Create CloudFront distribution for S3 bucket"""
+    logger.info(f"Creating CloudFront distribution for bucket: {args.bucket}")
+    
+    try:
+        # Initialize with settings
+        aws_cdn = AWSCDNService(config=Settings())
+        
+        result = aws_cdn.create_s3_distribution(
+            bucket_name=args.bucket,
+            domain_name=args.domain
+        )
+        
+        print(f"\n{'='*60}")
+        print(f" CLOUDFRONT DISTRIBUTION CREATED")
+        print(f"{'='*60}")
+        print(f"  ID:          {result['distribution_id']}")
+        print(f"  Domain:      {result['distribution_domain']}")
+        print(f"  Status:      {result['status']}")
+        print(f"  ARN:         {result['arn']}")
+        print(f"{'='*60}\n")
+        
+    except Exception as e:
+        logger.error(f"\u274c Failed to create distribution: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_aws_domain_setup_cdn_dns(args):
+    """Setup Route53 DNS for CloudFront distribution"""
+    logger.info(f"Setting up DNS for {args.domain} -> {args.cdn_domain}")
+    
+    try:
+        # Initialize with settings
+        aws_service = AWSDomainService(config=Settings())
+        result = aws_service.setup_cloudfront_dns(
+            domain=args.domain,
+            distribution_domain=args.cdn_domain
+        )
+        
+        print(f"\n{'='*60}")
+        print(f" AWS DNS SETUP COMPLETE")
+        print(f"{'='*60}")
+        print(f"  Domain:      {args.domain}")
+        print(f"  Target:      {args.cdn_domain}")
+        print(f"  Hosted Zone: {result['hosted_zone_id']}")
+        print(f"  Change ID:   {result['change_id']}")
+        print(f"{'='*60}\n")
+        
+    except Exception as e:
+        logger.error(f"\u274c AWS DNS setup failed: {str(e)}")
+        sys.exit(1)
+
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -344,6 +400,7 @@ Examples:
     deploy_parser.add_argument("--build-cmd", default="pnpm build", help="Build command (default: pnpm build)")
     deploy_parser.add_argument("--no-clean", action="store_true", help="Don't clean destination before deployment")
     deploy_parser.add_argument("--timestamp", action="store_true", help="Add timestamp to deployment folder")
+    deploy_parser.add_argument("--install", action="store_true", help="Run 'pnpm install' before building")
     
     # S3 options
     deploy_parser.add_argument("--s3", action="store_true", help="Deploy to AWS S3")
@@ -401,6 +458,16 @@ Examples:
     contact_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
     contact_parser.set_defaults(func=cmd_contact_create)
 
+    # ==================== AWS CDN COMMAND ====================
+    aws_cdn_parser = subparsers.add_parser("aws-cdn", help="AWS CloudFront management")
+    aws_cdn_subparsers = aws_cdn_parser.add_subparsers(dest="aws_cdn_command", help="AWS CDN operations")
+    
+    # aws-cdn create
+    cdn_create_parser = aws_cdn_subparsers.add_parser("create", help="Create CloudFront distribution")
+    cdn_create_parser.add_argument("--bucket", required=True, help="S3 bucket name")
+    cdn_create_parser.add_argument("--domain", required=True, help="Custom domain name")
+    cdn_create_parser.set_defaults(func=cmd_aws_cdn_create)
+
     # ==================== AWS DOMAIN COMMAND ====================
     aws_domain_parser = subparsers.add_parser("aws-domain", help="AWS Route53 domain management (Standalone)")
     aws_domain_subparsers = aws_domain_parser.add_subparsers(dest="aws_domain_command", help="AWS Domain operations")
@@ -416,6 +483,12 @@ Examples:
     aws_register_parser.add_argument("--contact", required=True, help="Path to contact JSON file")
     aws_register_parser.add_argument("--duration", type=int, default=1, help="Registration period (years)")
     aws_register_parser.set_defaults(func=cmd_aws_domain_register)
+
+    # aws-domain setup-cdn-dns
+    aws_dns_parser = aws_domain_subparsers.add_parser("setup-cdn-dns", help="Setup Route53 DNS for CloudFront")
+    aws_dns_parser.add_argument("--domain", required=True, help="Domain name")
+    aws_dns_parser.add_argument("--cdn-domain", required=True, help="CloudFront domain (e.g., d123.cloudfront.net)")
+    aws_dns_parser.set_defaults(func=cmd_aws_domain_setup_cdn_dns)
 
     
     # Parse and execute
@@ -437,5 +510,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
-    #Todo: 1.IF pnpm install required?

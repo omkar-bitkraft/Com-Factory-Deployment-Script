@@ -69,6 +69,7 @@ class AWSDomainService:
         
         self.config = config or get_settings()
         self.region = region
+        self.cloudfront_hosted_zone_id = "Z2FDTNDATAQYW2" # CloudFront Hosted Zone IDs
         
         # Domain registration client (must be us-east-1)
         self.domains_client = boto3.client(
@@ -170,3 +171,91 @@ class AWSDomainService:
         except ClientError as e:
             logger.error(f"AWS Registration error: {str(e)}")
             raise AWSDomainError(f"Registration failed: {str(e)}")
+
+    def setup_cloudfront_dns(self, domain: str, distribution_domain: str) -> Dict[str, Any]:
+        """
+        Configure Route53 DNS to point to a CloudFront distribution.
+        Creates Hosted Zone if necessary and adds Alias records.
+        """
+        logger.info(f"Setting up DNS for {domain} pointing to CloudFront {distribution_domain}")
+        
+        try:
+            # 1. Ensure Hosted Zone exists
+            hosted_zone_id = self._get_or_create_hosted_zone(domain)
+            
+            # CloudFront Hosted Zone ID is fixed for all distributions
+            # Reference: https://docs.aws.amazon.com/Route53/latest/APIReference/API_AliasTarget.html
+            
+            # 2. Create Alias Record
+            change_batch = {
+                'Comment': f"Alias record for {domain} pointing to CloudFront distribution",
+                'Changes': [
+                    {
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': domain,
+                            'Type': 'A',
+                            'AliasTarget': {
+                                'HostedZoneId': self.cloudfront_hosted_zone_id,
+                                'DNSName': distribution_domain,
+                                'EvaluateTargetHealth': False
+                            }
+                        }
+                    },
+                    # Also add www subdomain if it's the root domain
+                    {
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': f"www.{domain}",
+                            'Type': 'CNAME',
+                            'TTL': 300,
+                            'ResourceRecords': [{'Value': distribution_domain}]
+                        }
+                    }
+                ]
+            }
+            
+            response = self.route53_client.change_resource_record_sets(
+                HostedZoneId=hosted_zone_id,
+                ChangeBatch=change_batch
+            )
+            
+            logger.info(f"✅ DNS setup completed for {domain}")
+            return {
+                "status": "success",
+                "hosted_zone_id": hosted_zone_id,
+                "change_id": response['ChangeInfo']['Id']
+            }
+            
+        except ClientError as e:
+            logger.error(f"DNS setup failed: {str(e)}")
+            raise AWSDomainError(f"DNS setup failed: {str(e)}")
+
+    def _get_or_create_hosted_zone(self, domain: str) -> str:
+        """Get existing hosted zone ID or create a new one"""
+        # List zones to find matching name
+        # Note: list_hosted_zones_by_name returns zones starting with the name, 
+        # so we need to verify exact match.
+        try:
+            response = self.route53_client.list_hosted_zones_by_name(DNSName=domain)
+            zones = response.get('HostedZones', [])
+            
+            for zone in zones:
+                # AWS returns names with trailing dot
+                if zone['Name'].rstrip('.') == domain.rstrip('.'):
+                    logger.info(f"Found existing hosted zone for {domain}: {zone['Id']}")
+                    return zone['Id']
+            
+            # Create new one if not found
+            logger.info(f"Creating new hosted zone for {domain}")
+            caller_ref = str(time.time())
+            response = self.route53_client.create_hosted_zone(
+                Name=domain,
+                CallerReference=caller_ref,
+                HostedZoneConfig={'Comment': 'Created by Temp-AI-Website CLI', 'PrivateZone': False}
+            )
+            return response['HostedZone']['Id']
+            
+        except ClientError as e:
+            logger.error(f"Failed to get/create hosted zone: {str(e)}")
+            raise AWSDomainError(f"Hosted zone operation failed: {str(e)}")
