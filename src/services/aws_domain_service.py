@@ -259,3 +259,55 @@ class AWSDomainService:
         except ClientError as e:
             logger.error(f"Failed to get/create hosted zone: {str(e)}")
             raise AWSDomainError(f"Hosted zone operation failed: {str(e)}")
+
+    def add_acm_dns_records(
+        self, domain: str, validation_records: List[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """
+        Write ACM DNS validation CNAME records into the Route53 Hosted Zone.
+
+        Call this after ``AWSCloudFrontService.get_acm_validation_records()``
+        returns the required records.
+
+        Args:
+            domain:             Apex domain whose Hosted Zone will be updated
+            validation_records: List of dicts with "name" and "value" keys,
+                                as returned by get_acm_validation_records()
+        """
+        logger.info(
+            f"Writing {len(validation_records)} ACM validation records for {domain}"
+        )
+
+        try:
+            hosted_zone_id = self._get_or_create_hosted_zone(domain)
+
+            changes = [
+                {
+                    "Action": "UPSERT",
+                    "ResourceRecordSet": {
+                        "Name": rec["name"],
+                        "Type": "CNAME",
+                        "TTL": 300,
+                        "ResourceRecords": [{"Value": rec["value"]}],
+                    },
+                }
+                for rec in validation_records
+            ]
+
+            response = self.route53_client.change_resource_record_sets(
+                HostedZoneId=hosted_zone_id,
+                ChangeBatch={
+                    "Comment": f"ACM validation records for {domain}",
+                    "Changes": changes,
+                },
+            )
+
+            logger.info("✅ ACM validation DNS records written to Route53")
+            return {
+                "status": "success",
+                "change_id": response["ChangeInfo"]["Id"],
+            }
+
+        except ClientError as e:
+            logger.error(f"Failed to write ACM DNS records: {e}")
+            raise AWSDomainError(f"ACM DNS record creation failed: {e}")

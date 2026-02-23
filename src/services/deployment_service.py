@@ -279,12 +279,13 @@ class DeploymentService:
             
             logger.info(f"✅ S3 deployment successful: {len(uploaded_files)} files uploaded")
             
+            uploaded_files_list: list = list(uploaded_files)
             return {
                 "bucket": bucket_name,
                 "prefix": s3_prefix,
                 "region": aws_region,
-                "file_count": len(uploaded_files),
-                "files": uploaded_files[:10]  # First 10 files
+                "file_count": len(uploaded_files_list),
+                "files": uploaded_files_list[:10]  # First 10 files
             }
             
         except ClientError as e:

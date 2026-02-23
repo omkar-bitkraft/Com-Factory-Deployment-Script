@@ -9,7 +9,11 @@ import sys
 import argparse
 from pathlib import Path
 
-from src.services import DeploymentService, DomainService, AWSDomainService, AWSCDNService
+from src.services import (
+    DeploymentService, DomainService,
+    AWSDomainService, AWSCloudFrontService, AWSCDNService,
+    DeploymentOrchestrator,
+)
 from src.utils.logger import get_logger
 from src.utils.config import Settings
 
@@ -352,6 +356,95 @@ def cmd_aws_domain_setup_cdn_dns(args):
         sys.exit(1)
 
 
+# ================================================================
+#  FULL PIPELINE COMMANDS
+# ================================================================
+
+def cmd_deploy_full(args):
+    """Full automated pipeline: build → S3 → SSL → CloudFront → DNS"""
+    try:
+        orchestrator = DeploymentOrchestrator(config=Settings())
+        result = orchestrator.deploy_full(
+            app_dir=args.app_dir,
+            bucket_name=args.bucket,
+            domain=args.domain,
+            install=getattr(args, 'install', False),
+            build_command=getattr(args, 'build_cmd', 'pnpm build'),
+        )
+        print(f"\n{'='*60}")
+        print(f" 🎉 DEPLOYMENT COMPLETE")
+        print(f"{'='*60}")
+        print(f"  Live URL:     {result['url']}")
+        print(f"  Distribution: {result['distribution_id']}")
+        print(f"  CF Domain:    {result['distribution_domain']}")
+        print(f"  Certificate:  {result['certificate_arn']}")
+        print(f"{'='*60}\n")
+    except Exception as e:
+        logger.error(f"\u274c Full deployment failed: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_aws_cf_request_cert(args):
+    """Request an ACM SSL certificate"""
+    try:
+        cf = AWSCloudFrontService(config=Settings())
+        cert_arn = cf.request_ssl_certificate(domain=args.domain, include_www=not args.no_www)
+        print(f"\n{'='*60}")
+        print(f" ACM CERTIFICATE REQUESTED")
+        print(f"{'='*60}")
+        print(f"  Domain: {args.domain}")
+        print(f"  ARN:    {cert_arn}")
+        print(f"  Next:   aws-domain add-acm-dns --cert-arn {cert_arn} --domain {args.domain}")
+        print(f"{'='*60}\n")
+    except Exception as e:
+        logger.error(f"\u274c Certificate request failed: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_aws_domain_add_acm_dns(args):
+    """Write ACM DNS validation CNAME records to Route53"""
+    try:
+        cf = AWSCloudFrontService(config=Settings())
+        dns = AWSDomainService(config=Settings())
+        records = cf.get_acm_validation_records(args.cert_arn)
+        result = dns.add_acm_dns_records(domain=args.domain, validation_records=records)
+        print(f"\n{'='*60}")
+        print(f" ACM DNS VALIDATION RECORDS WRITTEN")
+        print(f"{'='*60}")
+        for r in records:
+            print(f"  CNAME: {r['name']} -> {r['value']}")
+        print(f"  Change ID: {result['change_id']}")
+        print(f"  Next:      Wait for cert then run 'aws-cloudfront create'")
+        print(f"{'='*60}\n")
+    except Exception as e:
+        logger.error(f"\u274c ACM DNS record creation failed: {str(e)}")
+        sys.exit(1)
+
+
+def cmd_aws_cf_create(args):
+    """Create CloudFront distribution for S3 bucket"""
+    try:
+        cf = AWSCloudFrontService(config=Settings())
+        cert_arn = getattr(args, 'cert_arn', None)
+        result = cf.create_s3_distribution(
+            bucket_name=args.bucket,
+            domain_name=args.domain,
+            certificate_arn=cert_arn,
+        )
+        print(f"\n{'='*60}")
+        print(f" CLOUDFRONT DISTRIBUTION CREATED")
+        print(f"{'='*60}")
+        print(f"  ID:      {result['distribution_id']}")
+        print(f"  Domain:  {result['distribution_domain']}")
+        print(f"  Status:  {result['status']}")
+        print(f"  HTTPS:   {'yes (redirect-to-https)' if cert_arn else 'no (HTTP only)'}")
+        print(f"  Next:    aws-domain setup-cdn-dns --domain {args.domain} --cdn-domain {result['distribution_domain']}")
+        print(f"{'='*60}\n")
+    except Exception as e:
+        logger.error(f"\u274c Failed to create distribution: {str(e)}")
+        sys.exit(1)
+
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -458,15 +551,42 @@ Examples:
     contact_parser.add_argument("--provider", choices=["GODADDY", "DNSIMPLE"], help="Domain provider (default: from config)")
     contact_parser.set_defaults(func=cmd_contact_create)
 
-    # ==================== AWS CDN COMMAND ====================
-    aws_cdn_parser = subparsers.add_parser("aws-cdn", help="AWS CloudFront management")
-    aws_cdn_subparsers = aws_cdn_parser.add_subparsers(dest="aws_cdn_command", help="AWS CDN operations")
-    
-    # aws-cdn create
-    cdn_create_parser = aws_cdn_subparsers.add_parser("create", help="Create CloudFront distribution")
-    cdn_create_parser.add_argument("--bucket", required=True, help="S3 bucket name")
-    cdn_create_parser.add_argument("--domain", required=True, help="Custom domain name")
-    cdn_create_parser.set_defaults(func=cmd_aws_cdn_create)
+    # ==================== DEPLOY FULL (pipeline) ====================
+    full_parser = subparsers.add_parser(
+        "deploy-full",
+        help="Full pipeline: build → S3 upload → SSL → CloudFront → DNS"
+    )
+    full_parser.add_argument("--app-dir", required=True, help="Path to Next.js app")
+    full_parser.add_argument("--bucket", required=True, help="S3 bucket name")
+    full_parser.add_argument("--domain", required=True, help="Apex domain (e.g. my-app.com)")
+    full_parser.add_argument("--install", action="store_true", help="Run pnpm install first")
+    full_parser.add_argument("--build-cmd", default="pnpm build", help="Build command")
+    full_parser.set_defaults(func=cmd_deploy_full)
+
+    # ==================== AWS CLOUDFRONT COMMAND ====================
+    aws_cf_parser = subparsers.add_parser("aws-cloudfront", help="AWS CloudFront & ACM management")
+    aws_cf_subparsers = aws_cf_parser.add_subparsers(dest="aws_cf_command", help="CloudFront operations")
+
+    # aws-cloudfront request-cert
+    cert_parser = aws_cf_subparsers.add_parser("request-cert", help="Request SSL certificate from ACM")
+    cert_parser.add_argument("--domain", required=True, help="Apex domain")
+    cert_parser.add_argument("--no-www", action="store_true", help="Skip www. SAN")
+    cert_parser.set_defaults(func=cmd_aws_cf_request_cert)
+
+    # aws-cloudfront create
+    cf_create_parser = aws_cf_subparsers.add_parser("create", help="Create CloudFront distribution")
+    cf_create_parser.add_argument("--bucket", required=True, help="S3 bucket name")
+    cf_create_parser.add_argument("--domain", required=True, help="Custom domain name")
+    cf_create_parser.add_argument("--cert-arn", help="ACM certificate ARN (enables HTTPS)")
+    cf_create_parser.set_defaults(func=cmd_aws_cf_create)
+
+    # ==================== AWS CDN (backwards-compat alias) ====================
+    aws_cdn_parser = subparsers.add_parser("aws-cdn", help="Alias for aws-cloudfront (deprecated)")
+    aws_cdn_subparsers = aws_cdn_parser.add_subparsers(dest="aws_cdn_command")
+    cdn_create_parser = aws_cdn_subparsers.add_parser("create")
+    cdn_create_parser.add_argument("--bucket", required=True)
+    cdn_create_parser.add_argument("--domain", required=True)
+    cdn_create_parser.set_defaults(func=cmd_aws_cf_create)
 
     # ==================== AWS DOMAIN COMMAND ====================
     aws_domain_parser = subparsers.add_parser("aws-domain", help="AWS Route53 domain management (Standalone)")
@@ -483,6 +603,14 @@ Examples:
     aws_register_parser.add_argument("--contact", required=True, help="Path to contact JSON file")
     aws_register_parser.add_argument("--duration", type=int, default=1, help="Registration period (years)")
     aws_register_parser.set_defaults(func=cmd_aws_domain_register)
+
+    # aws-domain add-acm-dns
+    acm_dns_parser = aws_domain_subparsers.add_parser(
+        "add-acm-dns", help="Write ACM validation DNS records to Route53"
+    )
+    acm_dns_parser.add_argument("--domain", required=True, help="Apex domain")
+    acm_dns_parser.add_argument("--cert-arn", required=True, help="ACM certificate ARN")
+    acm_dns_parser.set_defaults(func=cmd_aws_domain_add_acm_dns)
 
     # aws-domain setup-cdn-dns
     aws_dns_parser = aws_domain_subparsers.add_parser("setup-cdn-dns", help="Setup Route53 DNS for CloudFront")
